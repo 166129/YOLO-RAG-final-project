@@ -24,11 +24,31 @@ class Detection(BaseModel):
     bbox: list[int] = Field(..., description="Pixel box as [x1, y1, x2, y2].")
 
 
+class Citation(BaseModel):
+    """A cited chunk, with the handbook text it was drawn from.
+
+    `sources` above carries the same citations as plain strings (the shape the
+    project spec requires); this is the richer form the UI renders, so a reader can
+    see the sentence the answer came from without opening the PDF.
+    """
+
+    source_file: str
+    page: int
+    state: str
+    handbook: str = Field(..., description="Human-readable document title.")
+    snippet: str = Field(..., description="The passage of the chunk most relevant to the answer.")
+    distance: float = Field(..., description="Cosine distance; lower is a closer match.")
+
+
 class QueryResponse(BaseModel):
     answer: str = Field(..., description="Grounded answer with inline [n] citations.")
     sources: list[str] = Field(
         default_factory=list,
         description="Handbook and page for each chunk used. Empty when the assistant refused.",
+    )
+    citations: list[Citation] = Field(
+        default_factory=list,
+        description="The same citations with quoted handbook text. Empty when refused.",
     )
     detections: list[Detection] = Field(
         default_factory=list,

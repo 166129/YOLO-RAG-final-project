@@ -83,7 +83,11 @@ all loaded once in the FastAPI lifespan handler.
 │   ├── tests/test_query.py
 │   ├── requirements.txt  .env.example  Dockerfile
 ├── frontend/
-│   ├── app.py  api_client.py  requirements.txt  .env.example
+│   ├── app.py                      # chat UI
+│   ├── styles.py                   # page CSS + citation-card markup
+│   ├── api_client.py               # backend wrapper (reads API_BASE_URL)
+│   ├── .streamlit/config.toml      # theme; hides the Streamlit dev chrome
+│   └── requirements.txt  .env.example
 └── docs/screenshots/
 ```
 
@@ -240,13 +244,25 @@ curl -X POST http://localhost:8000/query \
 ```json
 {
   "answer": "The BAC limit for drivers under 21 years old is 0.01% [1].",
-  "sources": [
-    "ca_driver_handbook.pdf - p.114 (California)",
-    "ca_driver_handbook.pdf - p.27 (California)"
+  "sources": ["ca_driver_handbook.pdf - p.114 (California)"],
+  "citations": [
+    {
+      "source_file": "ca_driver_handbook.pdf",
+      "page": 114,
+      "state": "California",
+      "handbook": "California Driver's Handbook (DL 600)",
+      "snippet": "Blood Alcohol Concentration (BAC) Limits It is illegal for any person to operate a vehicle with a BAC of: - 0.08% or higher, if the person is 21 years old or older. - 0.01% or higher, if the person is under 21 years old...",
+      "distance": 0.4162
+    }
   ],
   "detections": []
 }
 ```
+
+Only the blocks the answer actually cited as `[n]` are returned — returning all five retrieved chunks
+would overstate the grounding. `sources` is the plain-string form the project spec requires;
+`citations` adds the quoted handbook text, and the UI renders it so a reader can check the answer
+against the source without opening the PDF.
 
 | Field | Type | Notes |
 |---|---|---|

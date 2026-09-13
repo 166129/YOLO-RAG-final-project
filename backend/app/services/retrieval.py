@@ -66,6 +66,10 @@ class Retriever:
     def states(self) -> list[str]:
         return self.config.get("states", [])
 
+    def handbook_title(self, state: str) -> str:
+        """Human-readable document title, e.g. 'California Driver's Handbook (DL 600)'."""
+        return self.config.get("sources", {}).get(state, f"{state} driver handbook")
+
     def retrieve(self, question: str, state: str | None = None, k: int | None = None) -> list[Chunk]:
         k = k or settings.top_k
         vector = self.embedder.encode([question], normalize_embeddings=True).tolist()
@@ -97,7 +101,7 @@ def format_sources(chunks: list[Chunk]) -> list[str]:
     return sources
 
 
-def cited_sources(chunks: list[Chunk], answer: str) -> list[str]:
+def cited_chunks(chunks: list[Chunk], answer: str) -> list[Chunk]:
     """Only the blocks the answer actually cited as [n].
 
     Returning every retrieved chunk would overstate the grounding: the model
@@ -106,4 +110,55 @@ def cited_sources(chunks: list[Chunk], answer: str) -> list[str]:
     """
     indices = sorted({int(n) for n in re.findall(r"\[(\d+)\]", answer)})
     used = [chunks[i - 1] for i in indices if 1 <= i <= len(chunks)]
-    return format_sources(used or chunks)
+    return used or chunks
+
+
+def cited_sources(chunks: list[Chunk], answer: str) -> list[str]:
+    return format_sources(cited_chunks(chunks, answer))
+
+
+_WORD = re.compile(r"[a-z0-9.%]+")
+
+
+def _content_words(text: str) -> set[str]:
+    # Short tokens are mostly stopwords; numbers and percentages are kept because
+    # they are usually the fact being cited ("0.01%", "2 seconds", "3 feet").
+    return {
+        w for w in _WORD.findall(text.lower())
+        if len(w) > 3 or any(ch.isdigit() for ch in w)
+    }
+
+
+def best_excerpt(text: str, answer: str, max_chars: int = 300) -> str:
+    """The window of `text` that best supports `answer`.
+
+    A chunk is ~1000 characters; quoting all of it buries the relevant line. This
+    scores each sentence by content-word overlap with the answer, then grows a
+    window around the best one until it fills the budget.
+    """
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if s.strip()]
+    if not sentences:
+        return " ".join(text[:max_chars].split())
+
+    wanted = _content_words(answer)
+    best = max(range(len(sentences)), key=lambda i: len(_content_words(sentences[i]) & wanted))
+
+    lo = hi = best
+    out = sentences[best]
+    while True:
+        grew = False
+        if hi + 1 < len(sentences) and len(out) + len(sentences[hi + 1]) + 1 <= max_chars:
+            hi += 1
+            out = f"{out} {sentences[hi]}"
+            grew = True
+        if lo - 1 >= 0 and len(out) + len(sentences[lo - 1]) + 1 <= max_chars:
+            lo -= 1
+            out = f"{sentences[lo]} {out}"
+            grew = True
+        if not grew:
+            break
+
+    out = " ".join(out.split())
+    if len(out) > max_chars:
+        out = out[:max_chars].rsplit(" ", 1)[0]
+    return f"{'…' if lo > 0 else ''}{out}{'…' if hi < len(sentences) - 1 else ''}"

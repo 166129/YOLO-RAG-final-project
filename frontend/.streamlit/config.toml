@@ -1,0 +1,21 @@
+[theme]
+# Amber on near-black: road-sign colours, and high contrast for a projector
+# during the live demo.
+base = "dark"
+primaryColor = "#F5B32E"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#171C26"
+textColor = "#E6EDF3"
+font = "sans serif"
+
+[client]
+# Hide the "Deploy" button and the developer hamburger menu - this is a finished
+# app, not a dev preview.
+toolbarMode = "minimal"
+showErrorDetails = false
+
+[browser]
+gatherUsageStats = false
+
+[server]
+maxUploadSize = 10

@@ -1,13 +1,18 @@
 """Streamlit chat interface for the Road Rules RAG Assistant."""
 from __future__ import annotations
 
-import io
-
 import streamlit as st
 
 import api_client
+import styles
 
-st.set_page_config(page_title="Road Rules Assistant", page_icon="🚦", layout="centered")
+st.set_page_config(
+    page_title="Road Rules Assistant",
+    page_icon="🚦",
+    layout="centered",
+    initial_sidebar_state="expanded",
+)
+st.markdown(styles.CSS, unsafe_allow_html=True)
 
 EXAMPLES = [
     "What is the BAC limit for drivers under 21?",
@@ -37,7 +42,7 @@ health, health_error = get_health()
 
 # ------------------------------------------------------------------------- sidebar
 with st.sidebar:
-    st.title("🚦 Road Rules")
+    st.markdown("### 🚦 Road Rules")
     st.caption("Answers grounded in official US state driver handbooks.")
 
     states = health.get("states", []) if health else []
@@ -56,9 +61,11 @@ with st.sidebar:
         )
 
     st.divider()
-    st.subheader("Ask about a sign")
+    st.markdown("##### Ask about a sign")
     uploaded = st.file_uploader(
-        "Upload a road-sign photo", type=["jpg", "jpeg", "png", "webp", "bmp"]
+        "Upload a road-sign photo",
+        type=["jpg", "jpeg", "png", "webp", "bmp"],
+        label_visibility="collapsed",
     )
     if uploaded is not None:
         st.image(uploaded, caption=uploaded.name, use_container_width=True)
@@ -78,49 +85,65 @@ with st.sidebar:
         st.error("Backend offline", icon="🔌")
     elif health:
         st.success(f"{health['chunks']:,} chunks indexed", icon="✅")
-        st.caption(f"LLM: `{health['llm_model']}`")
-        st.caption(f"Embeddings: `{health['embedding_model']}`")
-        st.caption(f"Vision: {'loaded' if health['yolo_loaded'] else 'not loaded'}")
+        st.caption(f"LLM `{health['llm_model']}`")
+        st.caption(f"Embeddings `{health['embedding_model']}`")
+        st.caption(f"Vision {'loaded' if health['yolo_loaded'] else 'not loaded'}")
         if not health.get("llm_reachable", True):
             st.warning("Ollama is not reachable from the backend.", icon="⚠️")
-    st.caption(f"API: `{api_client.API_BASE_URL}`")
+    st.caption(f"API `{api_client.API_BASE_URL}`")
 
-    if st.button("Clear conversation", use_container_width=True):
+    if st.session_state.messages and st.button("Clear conversation", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
 
 # ---------------------------------------------------------------------------- main
-st.title("Road Rules Assistant")
+st.markdown(
+    styles.header("Road Rules Assistant", "Every answer is quoted from the handbook it came from."),
+    unsafe_allow_html=True,
+)
 
 if health_error:
     st.error(health_error, icon="🔌")
     st.stop()
 
-if not st.session_state.messages:
+
+def render_evidence(message: dict) -> None:
+    """Detections and citations - the visible proof the answer is grounded."""
+    if message.get("detections"):
+        st.markdown(styles.detection_chips(message["detections"]), unsafe_allow_html=True)
+
+    citations = message.get("citations") or []
+    sources = message.get("sources") or []
+    if citations:
+        with st.expander(f"📄 Sources ({len(citations)})", expanded=True):
+            for c in citations:
+                st.markdown(styles.citation_card(c), unsafe_allow_html=True)
+    elif sources:
+        # Backend predates the citations field; fall back to plain strings.
+        with st.expander(f"📄 Sources ({len(sources)})"):
+            for s in sources:
+                st.markdown(f"- {s}")
+
+
+def render(message: dict) -> None:
+    with st.chat_message(message["role"]):
+        if message.get("image"):
+            st.image(message["image"], width=260)
+        st.markdown(message["content"])
+        if message["role"] == "assistant":
+            render_evidence(message)
+
+
+# `pending` is checked too: the work is handled further down in this same run, so
+# without it the starter prompts flash back up above the first answer.
+if not st.session_state.messages and not st.session_state.pending:
     st.caption("Ask a driving-rules question, or upload a sign photo from the sidebar.")
     cols = st.columns(2)
     for i, example in enumerate(EXAMPLES):
         if cols[i % 2].button(example, use_container_width=True, key=f"ex{i}"):
             st.session_state.pending = {"kind": "text", "question": example}
             st.rerun()
-
-
-def render(message: dict) -> None:
-    with st.chat_message(message["role"]):
-        if message.get("image"):
-            st.image(message["image"], width=280)
-        st.markdown(message["content"])
-        if message.get("detections"):
-            chips = "  ".join(
-                f"`{d['label']}` {d['confidence']:.0%}" for d in message["detections"]
-            )
-            st.caption(f"Detected: {chips}")
-        if message.get("sources"):
-            with st.expander(f"Sources ({len(message['sources'])})"):
-                for s in message["sources"]:
-                    st.markdown(f"- {s}")
-
 
 for message in st.session_state.messages:
     render(message)
@@ -169,26 +192,17 @@ if pending:
 
         if error:
             st.error(error, icon="⚠️")
-            st.session_state.messages.append(
-                {"role": "assistant", "content": f"⚠️ {error}"}
-            )
+            st.session_state.messages.append({"role": "assistant", "content": f"⚠️ {error}"})
         else:
             st.markdown(result["answer"])
-            if result.get("detections"):
-                chips = "  ".join(
-                    f"`{d['label']}` {d['confidence']:.0%}" for d in result["detections"]
-                )
-                st.caption(f"Detected: {chips}")
-            if result.get("sources"):
-                with st.expander(f"Sources ({len(result['sources'])})"):
-                    for s in result["sources"]:
-                        st.markdown(f"- {s}")
-            else:
-                st.caption("No sources - the assistant did not find this in the handbooks.")
-
-            st.session_state.messages.append({
+            assistant_message = {
                 "role": "assistant",
                 "content": result["answer"],
                 "sources": result.get("sources", []),
+                "citations": result.get("citations", []),
                 "detections": result.get("detections", []),
-            })
+            }
+            render_evidence(assistant_message)
+            if not assistant_message["citations"] and not assistant_message["sources"]:
+                st.caption("No sources - the assistant did not find this in the handbooks.")
+            st.session_state.messages.append(assistant_message)

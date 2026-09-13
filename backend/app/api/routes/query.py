@@ -8,15 +8,34 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 
-from app.schemas.query import Detection, HealthResponse, QueryRequest, QueryResponse
+from app.schemas.query import (
+    Citation, Detection, HealthResponse, QueryRequest, QueryResponse,
+)
 from app.services.generation import REFUSAL, is_grounded
-from app.services.retrieval import cited_sources
+from app.services.retrieval import best_excerpt, cited_chunks, format_sources
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/bmp"}
 MAX_IMAGE_BYTES = 10 * 1024 * 1024
+
+
+def build_citations(chunks, answer, retriever) -> tuple[list[str], list[Citation]]:
+    """Resolve the answer's [n] markers into plain sources and quoted citations."""
+    used = cited_chunks(chunks, answer)
+    citations = [
+        Citation(
+            source_file=c.source_file,
+            page=c.page,
+            state=c.state,
+            handbook=retriever.handbook_title(c.state),
+            snippet=best_excerpt(c.text, answer),
+            distance=round(c.distance, 4),
+        )
+        for c in used
+    ]
+    return format_sources(used), citations
 
 
 @router.get("/health", response_model=HealthResponse, tags=["system"])
@@ -54,10 +73,10 @@ def query(payload: QueryRequest, request: Request) -> QueryResponse:
         "q=%r state=%s chunks=%d grounded=%s",
         payload.question[:60], payload.state, len(chunks), is_grounded(answer),
     )
-    return QueryResponse(
-        answer=answer,
-        sources=[] if refused else cited_sources(chunks, answer),
-    )
+    if refused:
+        return QueryResponse(answer=answer, sources=[], citations=[])
+    sources, citations = build_citations(chunks, answer, state.retriever)
+    return QueryResponse(answer=answer, sources=sources, citations=citations)
 
 
 @router.post("/query/image", response_model=QueryResponse, tags=["query"])
@@ -108,9 +127,13 @@ async def query_image(
             raise HTTPException(status_code=503, detail=f"LLM unavailable: {exc}") from exc
 
         refused = REFUSAL.lower() in answer.lower()
+        sources, citations = ([], []) if refused else build_citations(
+            chunks, answer, app_state.retriever
+        )
         return QueryResponse(
             answer=answer,
-            sources=[] if refused else cited_sources(chunks, answer),
+            sources=sources,
+            citations=citations,
             detections=[Detection(**d) for d in detections],
         )
     finally:

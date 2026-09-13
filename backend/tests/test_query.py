@@ -72,6 +72,37 @@ def test_out_of_scope_question_is_refused_with_no_sources(client):
     body = r.json()
     assert REFUSAL.lower() in body["answer"].lower()
     assert body["sources"] == [], "a refusal must not cite sources"
+    assert body["citations"] == [], "a refusal must not quote handbook text"
+
+
+def test_citations_quote_the_handbook_and_match_sources(client):
+    r = client.post(
+        "/query",
+        json={"question": "What is the BAC limit for drivers under 21?", "state": "California"},
+    )
+    body = r.json()
+    citations = body["citations"]
+    assert citations, "a grounded answer must carry quoted citations"
+    # The stub answer cites [1], so exactly one block should be resolved.
+    assert len(citations) == len(body["sources"]) == 1
+    c = citations[0]
+    assert c["state"] == "California"
+    assert c["snippet"].strip(), "the snippet must contain handbook text"
+    assert c["handbook"], "the citation should name the document, not just the file"
+    assert 0.0 <= c["distance"] <= 2.0, c["distance"]
+    # The plain-string source and the rich citation must describe the same page.
+    assert f"p.{c['page']}" in body["sources"][0]
+
+
+def test_excerpt_prefers_the_sentence_that_supports_the_answer():
+    from app.services.retrieval import best_excerpt
+
+    text = (
+        "Driving is a privilege. It is illegal to operate a vehicle with a BAC of "
+        "0.01% or higher if you are under 21 years old. Always wear your seat belt."
+    )
+    got = best_excerpt(text, "The BAC limit for drivers under 21 is 0.01%.", max_chars=90)
+    assert "0.01%" in got, got
 
 
 def test_state_filter_restricts_retrieval(client):
