@@ -1,0 +1,23 @@
+# Pinned to the versions this project was built and tested against.
+# Regenerate with: pip freeze > requirements.txt
+
+# API
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+pydantic==2.13.3
+pydantic-settings==2.15.0
+python-multipart==0.0.26
+
+# Retrieval
+chromadb==1.5.9
+sentence-transformers==6.0.1
+
+# Generation
+ollama==0.6.2
+
+# Vision (Extended Track)
+ultralytics==8.4.135
+
+# Tests
+pytest==9.1.1
+httpx==0.28.1

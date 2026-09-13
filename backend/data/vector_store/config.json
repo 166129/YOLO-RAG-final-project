@@ -1,0 +1,21 @@
+{
+  "embedding_model": "all-MiniLM-L6-v2",
+  "collection_name": "driver_handbooks",
+  "llm_model": "qwen2.5:7b-instruct",
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "chunk_count": 726,
+  "top_k": 5,
+  "states": [
+    "California",
+    "New York",
+    "Virginia"
+  ],
+  "sources": {
+    "California": "California Driver's Handbook (DL 600)",
+    "New York": "New York State Driver's Manual (MV-21)",
+    "Virginia": "Virginia Driver's Manual (DMV 39)"
+  },
+  "refusal_string": "I could not find this in the handbook.",
+  "built_at": "2026-09-13T14:36:00.951177+00:00"
+}

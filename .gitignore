@@ -1,0 +1,37 @@
+# --- Python ---
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# --- Secrets: never commit real env files (.env.example IS committed) ---
+.env
+*.log
+
+# --- Image dataset: auth-gated download, ~880 images. See README "Data".
+# The trained weights (backend/models/signs_yolo.pt, ~6 MB) ARE committed.
+data/signs/
+
+# --- The notebook's own build output. backend/data/vector_store/ is the copy that
+# actually gets served, and THAT one is committed; this is a regenerable duplicate.
+data/vector_store/
+
+# --- YOLO training artifacts ---
+runs/
+yolo11n.pt
+*.zip
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# NOTE: data/handbooks/ (10 MB) and data/vector_store/ (9 MB) are deliberately
+# COMMITTED so the project runs straight after a clone. Both are well under the
+# 50 MB guidance. The California handbook is CC BY-NC 4.0; see README "Data".
