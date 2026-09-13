@@ -151,8 +151,11 @@ uvicorn app.main:app --reload
 Open <http://localhost:8000/docs> for Swagger UI. The startup log should read:
 
 ```
-ready: 726 chunks | states=California, New York, Virginia | llm=qwen2.5:7b-instruct (reachable=True) | yolo=True
+ready: 726 chunks | states=California, New York, Virginia | llm=qwen2.5:7b-instruct (reachable=True) | yolo=False
 ```
+
+`yolo=False` until you add `backend/models/signs_yolo.pt` (see *Image dataset* above). Text queries
+work fully without it; `/query/image` returns 503 until the weights are present.
 
 ### 2. Frontend
 
