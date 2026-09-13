@@ -63,4 +63,8 @@ class HealthResponse(BaseModel):
     llm_model: str
     llm_reachable: bool
     yolo_loaded: bool
+    sign_classes: list[str] = Field(
+        default_factory=list,
+        description="Road-sign classes the loaded detector covers. Empty if no weights.",
+    )
     states: list[str]

@@ -48,6 +48,7 @@ def health(request: Request) -> HealthResponse:
         llm_model=state.generator.model,
         llm_reachable=state.llm_reachable,
         yolo_loaded=state.detector.available,
+        sign_classes=state.detector.covered_classes,
         states=state.retriever.states,
     )
 

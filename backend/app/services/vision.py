@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 # Each sign class maps to the phrasing the handbooks actually use, so retrieval lands on
 # the rule rather than on a passing mention of the sign.
 #
+# The shipped weights detect three classes: stop, speedlimit, crosswalk. `trafficlight`
+# is kept because the upstream dataset defines it and some exports include it - an unused
+# key costs nothing, whereas a missing one would fall back to a generic lookup. Check what
+# a given checkpoint actually covers with SignDetector.covered_classes().
+#
 # Note: `speedlimit` says a speed-limit sign is present, not which number it shows -
 # reading the digits would need a second OCR stage, which is out of scope.
 CLASS_TO_QUERY: dict[str, str] = {
@@ -48,6 +53,18 @@ class SignDetector:
     @property
     def available(self) -> bool:
         return self.model is not None
+
+    @property
+    def covered_classes(self) -> list[str]:
+        """Classes this checkpoint can actually detect.
+
+        The shipped weights cover three of the four keys in CLASS_TO_QUERY, so the
+        UI advertises this rather than letting someone upload a sign the model was
+        never trained on and read "no sign detected" as a bug.
+        """
+        if self.model is None:
+            return []
+        return sorted(self.model.names.values())
 
     def detect(self, image_path: str | Path) -> list[dict]:
         if self.model is None:

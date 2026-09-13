@@ -62,6 +62,10 @@ with st.sidebar:
 
     st.divider()
     st.markdown("##### Ask about a sign")
+    sign_classes = (health or {}).get("sign_classes", [])
+    if sign_classes:
+        # Naming what the detector covers stops an unsupported sign reading as a bug.
+        st.caption("Detects: " + ", ".join(f"`{c}`" for c in sign_classes))
     uploaded = st.file_uploader(
         "Upload a road-sign photo",
         type=["jpg", "jpeg", "png", "webp", "bmp"],

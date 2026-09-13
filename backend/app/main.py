@@ -39,6 +39,8 @@ async def lifespan(app: FastAPI):
         app.state.llm_reachable,
         app.state.detector.available,
     )
+    if app.state.detector.available:
+        logger.info("sign classes: %s", ", ".join(app.state.detector.covered_classes))
     if not app.state.llm_reachable:
         logger.warning("Ollama is not reachable - /query will return 503 until it is running.")
 

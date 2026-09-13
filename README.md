@@ -50,7 +50,7 @@ all loaded once in the FastAPI lifespan handler.
 | Embeddings | `all-MiniLM-L6-v2` (384-d) | Fast, strong on short question→passage matching |
 | Vector store | **ChromaDB** (persisted) | Stores chunk text + metadata beside vectors, so citations and the state filter come for free |
 | LLM | **`qwen2.5:7b-instruct`** via Ollama | Runs locally; ~6–9 s per answer warm |
-| Vision | **`yolo11n`** (Ultralytics) | ~6 MB weights, ~60 ms per image on CPU |
+| Vision | **`yolo11n`** (Ultralytics) | 5.5 MB weights, ~60 ms per image on CPU; mAP50 0.793 |
 | Backend | FastAPI + Pydantic v2 | |
 | Frontend | Streamlit | |
 
@@ -79,7 +79,7 @@ all loaded once in the FastAPI lifespan handler.
 │   │   │   └── vision.py           # YOLO + class→query mapping
 │   │   └── utils/logging_config.py
 │   ├── data/vector_store/          # ChromaDB the API serves — committed (9 MB)
-│   ├── models/signs_yolo.pt        # YOLO weights (~6 MB)
+│   ├── models/signs_yolo.pt        # YOLO weights — committed (5.5 MB)
 │   ├── tests/test_query.py
 │   ├── requirements.txt  .env.example  Dockerfile
 ├── frontend/
@@ -88,7 +88,9 @@ all loaded once in the FastAPI lifespan handler.
 │   ├── api_client.py               # backend wrapper (reads API_BASE_URL)
 │   ├── .streamlit/config.toml      # theme; hides the Streamlit dev chrome
 │   └── requirements.txt  .env.example
-└── docs/screenshots/
+└── docs/
+    ├── screenshots/                # README images
+    └── training/                   # YOLO results.csv + args.yaml
 ```
 
 ---
@@ -116,16 +118,40 @@ serves — so a fresh clone runs without rebuilding anything. The notebook's own
 
 ### Image dataset — road signs (not committed)
 
-**Kaggle Road Sign Detection** — 877 images, 4 classes: `stop`, `speedlimit`, `crosswalk`,
-`trafficlight`.
+**Kaggle Road Sign Detection**, via the Roboflow mirror. The exported version used here
+(`Kaggle-Road-Sign-Dataset-5`) augments to **7,952 train / 2,608 val images** across **3 classes**:
+`stop`, `speedlimit`, `crosswalk`.
+
+> The upstream dataset also defines `trafficlight`, but the export used here does not include it, so
+> the shipped weights detect three classes. `GET /health` reports exactly what the loaded checkpoint
+> covers (`sign_classes`), and the UI displays it, so an unsupported sign reads as "not covered"
+> rather than a bug.
 
 - Kaggle (PASCAL VOC XML): <https://www.kaggle.com/datasets/andrewmvd/road-sign-detection>
 - **Roboflow mirror in YOLO format** (recommended — no conversion needed):
   <https://universe.roboflow.com/kaggle-road-sign-dataset/kaggle-road-sign-dataset>
 
 Download requires a free Kaggle or Roboflow account, so the images are gitignored. The **trained
-weights are committed** (`backend/models/signs_yolo.pt`), so you do not need the dataset to run the
-app — only to retrain.
+weights are committed** (`backend/models/signs_yolo.pt`, 5.5 MB), so you do not need the dataset to
+run the app — only to retrain.
+
+### Detector results
+
+Fine-tuned `yolo11n` for 30 epochs at 640 px on a free Colab T4 (`notebooks/yolo_training_colab.ipynb`):
+
+| Metric | Value |
+|---|---|
+| mAP50 | **0.793** |
+| mAP50-95 | **0.605** |
+| Precision | 0.876 |
+| Recall | 0.754 |
+
+Raw per-epoch metrics and the exact training arguments are in [`docs/training/`](docs/training/).
+
+Two honest caveats. The validation split holds 2,608 images but only 660 labelled instances — most
+are sign-free backgrounds, which suppresses the headline mAP while genuinely helping false-positive
+rates. And `speedlimit` detects *that* a speed-limit sign is present, not the number on it; reading
+the digits would need a second OCR stage, which is out of scope.
 
 ---
 
@@ -155,11 +181,12 @@ uvicorn app.main:app --reload
 Open <http://localhost:8000/docs> for Swagger UI. The startup log should read:
 
 ```
-ready: 726 chunks | states=California, New York, Virginia | llm=qwen2.5:7b-instruct (reachable=True) | yolo=False
+ready: 726 chunks | states=California, New York, Virginia | llm=qwen2.5:7b-instruct (reachable=True) | yolo=True
+sign classes: crosswalk, speedlimit, stop
 ```
 
-`yolo=False` until you add `backend/models/signs_yolo.pt` (see *Image dataset* above). Text queries
-work fully without it; `/query/image` returns 503 until the weights are present.
+If it reports `yolo=False`, `backend/models/signs_yolo.pt` is missing. Text queries still work
+fully; only `/query/image` returns 503.
 
 ### 2. Frontend
 
@@ -229,6 +256,7 @@ curl http://localhost:8000/health
   "llm_model": "qwen2.5:7b-instruct",
   "llm_reachable": true,
   "yolo_loaded": true,
+  "sign_classes": ["crosswalk", "speedlimit", "stop"],
   "states": ["California", "New York", "Virginia"]
 }
 ```
@@ -280,15 +308,20 @@ curl -X POST http://localhost:8000/query/image \
   -F "state=California"
 ```
 
-Returns the same shape plus `detections`:
+Returns the same shape plus `detections` (real response):
 
 ```json
 {
-  "answer": "You must make a full stop at the limit line ... [1]",
-  "sources": ["ca_driver_handbook.pdf - p.39 (California)"],
-  "detections": [{"label": "stop", "confidence": 0.91, "bbox": [142, 88, 268, 214]}]
+  "answer": "When you encounter an 8-sided red STOP sign, you must make a full stop at the white limit line or before entering the crosswalk. If a limit line or crosswalk is not painted on the street, stop before entering the intersection. [2]",
+  "sources": ["ca_driver_handbook.pdf - p.43 (California)"],
+  "citations": [{"page": 43, "state": "California", "snippet": "Stop at the white limit line...", "distance": 0.3518}],
+  "detections": [{"label": "stop", "confidence": 0.98, "bbox": [1, 22, 623, 625]}]
 }
 ```
+
+The detected class becomes the retrieval query via `CLASS_TO_QUERY` in
+`backend/app/services/vision.py`, so an image query runs the **same** retrieval and grounding path as
+a typed one. Only `stop`, `speedlimit` and `crosswalk` are covered — see *Image dataset* above.
 
 **415** for a non-image upload, **413** above 10 MB, **503** if the weights are not loaded.
 
@@ -383,6 +416,12 @@ own knowledge, and shows no sources:
 sign-upload panel:
 
 ![Home](docs/screenshots/01_home.png)
+
+**Detector training** — 30 epochs on a Colab T4, and the confusion matrix across the three classes:
+
+| | |
+|---|---|
+| ![Training curves](docs/screenshots/04_yolo_training_curves.png) | ![Confusion matrix](docs/screenshots/05_yolo_confusion_matrix.png) |
 
 ---
 

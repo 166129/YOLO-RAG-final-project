@@ -35,3 +35,10 @@ desktop.ini
 # NOTE: data/handbooks/ (10 MB) and data/vector_store/ (9 MB) are deliberately
 # COMMITTED so the project runs straight after a clone. Both are well under the
 # 50 MB guidance. The California handbook is CC BY-NC 4.0; see README "Data".
+
+# --- Colab training run artifacts ---
+# The useful outputs are copied into docs/screenshots/ and docs/training/, and the
+# weights live at backend/models/signs_yolo.pt. This folder also carries a duplicate
+# best.pt + last.pt (~11 MB) that would otherwise be committed twice.
+training_plots/
+/signs_yolo.pt
