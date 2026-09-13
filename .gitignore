@@ -42,3 +42,9 @@ desktop.ini
 # best.pt + last.pt (~11 MB) that would otherwise be committed twice.
 training_plots/
 /signs_yolo.pt
+
+# ChromaDB rebuilds its HNSW segment directory from chroma.sqlite3 on first query,
+# so only the DB and config.json need committing. Tracking the segment dirs also
+# dirtied the tree on every backend start, and orphaned copies accumulated because
+# OneDrive can hold a lock that makes the cleanup delete fail silently.
+backend/data/vector_store/*/
