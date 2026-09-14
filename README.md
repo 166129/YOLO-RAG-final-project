@@ -149,11 +149,28 @@ Fine-tuned `yolo11n` for 30 epochs at 640 px on a free Colab T4 (`notebooks/yolo
 
 Raw per-epoch metrics and the exact training arguments are in [`docs/training/`](docs/training/).
 
-**Domain gap worth knowing.** Every training image is a *photograph* of a sign in a real scene. A flat
-vector rendering of a sign — even of a trained class — often is not detected. §2.5 of the notebook
-demonstrates this with two committed samples: a stop sign detects at 0.96, while a rendered speed-limit
-sign detects nothing. Feed the API photographs. Closing the gap would mean adding rendered signs to the
-training set, not changing code.
+**Jurisdiction mismatch — the headline limitation.** The sign dataset is **European**; the handbooks
+are **US**. Inspecting the training batches shows `speedlimit` boxes drawn around white discs with a
+red ring, and `crosswalk` boxes around blue squares showing a figure on zebra stripes. So `speedlimit`
+does not mean "a speed-limit sign" to this model — it means *"a white disc with a red ring"*.
+
+| Test input | Result |
+|---|---|
+| US photo, "SPEED LIMIT 20" (Massachusetts) | nothing detected |
+| US photo, "SPEED LIMIT 70" (Texas) | nothing detected |
+| European red-ring "30" disc | `speedlimit` **0.951** |
+| No U-Turn sign (white, red ring, black arrow) | `speedlimit` **0.91** |
+| US stop sign photo | `stop` **0.963** |
+
+That explains both directions of failure: a US rectangle shares none of the learned signature and
+scores nothing, while a No U-Turn sign matches it almost exactly and yields a confident, correctly
+cited answer about speed limits — for a sign that prohibits U-turns. The grounding layer behaved
+correctly; the question it was handed was wrong.
+
+`stop` transfers cleanly because the red octagon is near-identical worldwide. `speedlimit` and
+`crosswalk` do not. **The per-class metrics above are honest for European signs — that is what the
+validation split held — and do not describe performance on US roads.** Fixing this means retraining on
+a US set such as LISA: a dataset swap, not a code change. §2.5 of the notebook carries the evidence.
 
 Two further caveats. The validation split holds 2,608 images but only 660 labelled instances — most
 are sign-free backgrounds, which suppresses the headline mAP while genuinely helping false-positive
