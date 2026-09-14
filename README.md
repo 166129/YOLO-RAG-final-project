@@ -90,6 +90,7 @@ all loaded once in the FastAPI lifespan handler.
 │   └── requirements.txt  .env.example
 └── docs/
     ├── screenshots/                # README images
+    ├── sample_signs/               # public-domain signs for the notebook's §2.5 demo
     └── training/                   # YOLO results.csv + args.yaml
 ```
 
@@ -148,7 +149,13 @@ Fine-tuned `yolo11n` for 30 epochs at 640 px on a free Colab T4 (`notebooks/yolo
 
 Raw per-epoch metrics and the exact training arguments are in [`docs/training/`](docs/training/).
 
-Two honest caveats. The validation split holds 2,608 images but only 660 labelled instances — most
+**Domain gap worth knowing.** Every training image is a *photograph* of a sign in a real scene. A flat
+vector rendering of a sign — even of a trained class — often is not detected. §2.5 of the notebook
+demonstrates this with two committed samples: a stop sign detects at 0.96, while a rendered speed-limit
+sign detects nothing. Feed the API photographs. Closing the gap would mean adding rendered signs to the
+training set, not changing code.
+
+Two further caveats. The validation split holds 2,608 images but only 660 labelled instances — most
 are sign-free backgrounds, which suppresses the headline mAP while genuinely helping false-positive
 rates. And `speedlimit` detects *that* a speed-limit sign is present, not the number on it; reading
 the digits would need a second OCR stage, which is out of scope.
